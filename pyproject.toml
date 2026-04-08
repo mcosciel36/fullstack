@@ -1,0 +1,29 @@
+[project]
+name = "fullstack"
+version = "0.1.0"
+description = "Spark-first local and Databricks-ready package."
+authors = [{ name = "Mark Cosciello", email = "markcosciello@yahoo.com" }]
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "pyspark>=3.5,<4.0",
+    "delta-spark>=3.2,<4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "flake8",
+    "isort",
+    "mypy",
+    "pytest>=8.0,<9.0",
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+packages = [{ include = "fullstack", from = "src" }]
+
+[tool.black]
+target-version = ["py310"]
