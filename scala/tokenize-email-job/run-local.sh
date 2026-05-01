@@ -13,8 +13,14 @@ if [[ ! -f "${JAR}" ]]; then
   exit 1
 fi
 
+DEFAULT_IN="${ROOT}/src/fullstack/jobs/output"
+DEFAULT_OUT="${ROOT}/src/fullstack/jobs/output_tokenized"
+INPUT_PATH="${1:-${DEFAULT_IN}}"
+OUTPUT_PATH="${2:-${DEFAULT_OUT}}"
+
 exec "${SPARK_SUBMIT}" \
   --class fullstack.jobs.TokenizeEmailsJob \
   --master 'local[*]' \
   "${JAR}" \
-  "$@"
+  "${INPUT_PATH}" \
+  "${OUTPUT_PATH}"

@@ -4,8 +4,9 @@ Use this file to resume work in a new chat thread.
 
 ## Repository state (as of last update)
 
-- **`main` is aligned with commit `9264bd2`** (force-pushed to `origin/main` after reset): *Add Spark jobs, Scala tokenize pipeline, docs, and tooling*.
-- End-to-end local verification succeeded: `sbt package` → `poetry run python -m fullstack.jobs.customers_job` → `./scala/tokenize-email-job/run-local.sh` → `poetry run pytest -q`.
+- **`feature/databricks-notebook`** (branch): **`notebooks/fullstack_databricks.ipynb`** for import/running in Databricks (widgets + optional wheel `%pip`; PySpark tokenization matches Scala); **`customers_job`** / Scala entrypoint no longer hard-code a developer home path—see below.
+- **`main`** baseline also has **`notebooks/fullstack_local_spark.ipynb`**, optional **`notebook`** Poetry extra (Jupyter), and **`.gitignore`** on job Parquet under `src/fullstack/jobs/output/` and `output_tokenized/`.
+- End-to-end **local** verification: `sbt package` → `poetry run python -m fullstack.jobs.customers_job` → `./scala/tokenize-email-job/run-local.sh` → `poetry run pytest -q`; local browser notebook: `poetry install --extras notebook` → `poetry run jupyter notebook notebooks/fullstack_local_spark.ipynb`.
 
 ## What exists in the codebase
 
@@ -17,15 +18,15 @@ Use this file to resume work in a new chat thread.
   - **`get_spark()`** — on Databricks returns `SparkSession.getActiveSession()` or `getOrCreate()` **without** forcing `local[*]`; locally uses `get_local_spark()`.
 - **`jobs/customers_job.py`**
   - Builds a 3-row customers DataFrame, adds `ingested_at`, `repartition(2)`, writes Parquet with **overwrite**.
-  - **Important:** `output_path` is a **hard-coded macOS path** (`/Users/markcosciello/git/fullstack/src/fullstack/jobs/output`). Clones on other machines or Databricks **must change this** (or parameterize — recommended next step).
+  - **`run(output_path=...)`** resolution: explicit arg → **`FULLSTACK_CUSTOMERS_OUTPUT_DIR`** → local default **`Path(__file__).parent/"output"`**. On **Databricks**, no default path: callers must pass a URI or set the env var (writable package paths under `site-packages` are wrong).
   - Calls `spark.stop()` only when **not** on Databricks (safe for attached cluster session).
+- **`jobs/email_tokenization.py`** — **`with_email_token_columns`**: PySpark parity with Scala **`TokenizeEmailsJob`** for use in **`fullstack_databricks.ipynb`** without `spark-submit`.
 
 ### Scala (`scala/tokenize-email-job/`)
 
 - **`TokenizeEmailsJob.scala`** — reads Parquet, tokenizes `email` (`email_local`, `email_domain`, token arrays, `email_token_string`), writes Parquet overwrite.
-- **Defaults** are the same **hard-coded** input/output directories under `/Users/markcosciello/git/fullstack/...`.
-- **CLI args:** `args(0)` = input dir, `args(1)` = output dir (use this on Databricks / other paths).
-- **`run-local.sh`** — `spark-submit` using PySpark’s `spark-submit` from Poetry `.venv`; `--master local[*]`.
+- **CLI:** **two positional args required** — input parquet directory URI, output parquet directory URI (e.g. `dbfs:/...`). **`run-local.sh`** supplies repo-relative defaults when args omitted.
+- **`run-local.sh`** — `spark-submit` using PySpark’s `spark-submit` from Poetry `.venv`; **`--master local[*]`**; passes **`"${INPUT_PATH}" "${OUTPUT_PATH}"`** to the JVM main.
 - **`sbt package`** produces `target/scala-2.12/fullstack-tokenize-email-job_2.12-0.1.0.jar` (ignored by git via `scala/**/target/`).
 
 ### Docs / tooling
@@ -33,11 +34,13 @@ Use this file to resume work in a new chat thread.
 - **`README.md`** — setup (asdf, Poetry, Java §8), debugging (§11), parallelism (§12), Scala job (§13), troubleshooting.
 - **`.vscode/launch.json`** — module debug `fullstack.jobs.customers_job` from repo root with Poetry `.venv`.
 - **`context_file.md`**, **`initial_request.txt`** — prior notes.
-- Sample Parquet may exist under **`src/fullstack/jobs/output`** and **`output_tokenized`** in git (small files).
+- **`notebooks/fullstack_databricks.ipynb`** — import/run in **Databricks**: `dbutils` widgets (`customers_parquet_uri`, `tokenized_parquet_uri`, optional **`pip_wheel_uri`**), **`get_spark()`**, **`with_email_token_columns`**; **no `sbt`/JAR/bash** step. Locally it uses temp dirs and `sys.path` to **`src`** for smoke runs.
+- **`notebooks/fullstack_local_spark.ipynb`** — **local-only** Poetry + Jupyter: PySpark + **`%%bash`** `sbt` / `run-local.sh`. Not for uploading to Databricks as-is.
+- Parquet under **`output/`** and **`output_tokenized/`** is **ignored by git**; recreate with jobs or the notebook.
 
 ### Dependencies (unchanged broadly)
 
-- `pyspark>=3.5,<4.0`, `delta-spark>=3.2,<4.0`; dev extras: `pytest`, `black`, `isort`, `flake8`, `mypy`.
+- `pyspark>=3.5,<4.0`, `delta-spark>=3.2,<4.0`; dev extras: `pytest`, `black`, `isort`, `flake8`, `mypy`; optional **`notebook`** extra: `jupyter`, `ipykernel` (local Jupyter only—not a Databricks requirement).
 - Scala build: Spark **3.5.x**, Scala **2.12**, sbt from `project/build.properties`.
 
 ## Local commands (canonical)
@@ -55,9 +58,34 @@ Optional: `./scala/tokenize-email-job/run-local.sh <input_parquet_dir> <output_p
 
 ## Gaps before “clone anywhere, README-only”
 
-1. Replace **hard-coded filesystem paths** in `customers_job.py` and Scala default paths with **`dbfs:/` / Unity Catalog volumes / env vars** when targeting Databricks, or derive repo root locally.
-2. **`TokenizeEmailsJob`** ends with **`spark.stop()`** in `finally`. For a **long-lived Databricks cluster** shared with other notebooks, prefer **not** stopping the global `SparkSession` (refactor for Databricks entrypoint vs local `spark-submit`).
-3. **`run-local.sh`** is for **local** `spark-submit`; Databricks equivalent is usually a **Job** with JAR task or cluster `spark-submit` with DB paths.
+1. **Done on `feature/databricks-notebook`:** `customers_job` / Scala mains no longer bake in a developer home directory; **`fullstack_databricks.ipynb`** uses **DB widgets** / env for URIs. Remaining polish: README section for “upload notebook + wheel + widget defaults.”
+2. **`TokenizeEmailsJob`** ends with **`spark.stop()`** in `finally`. For **shared Databricks clusters** or JAR-as-library patterns, conditional stop (or separate `run(spark)` without stop).
+3. **`run-local.sh`** remains **local** `spark-submit`; Databricks Jobs use **JAR task + DBFS/Volume URIs** or **`fullstack_databricks.ipynb`** (PySpark parity, no JVM submit).
+
+---
+
+## **`fullstack_databricks.ipynb`** (primary Databricks artifact)
+
+Upload **`notebooks/fullstack_databricks.ipynb`** or sync via **Repos**. Flow:
+
+1. **Widgets** — **`customers_parquet_uri`**, **`tokenized_parquet_uri`** (`dbfs:` or Volume URIs); optional **`pip_wheel_uri`** then run the **`pip`** cell once.
+2. **Imports** — `from fullstack.jobs.email_tokenization import with_email_token_columns` (requires wheel/library).
+3. **No** JVM `spark-submit`; tokenization mirrors Scala in **`email_tokenization.py`**.
+
+Operational notes:
+
+- Omit **`spark.stop()`** at the bottom (notebook already does)—shared clusters rely on reuse.
+- For **`customers_job.run()`** from notebooks: pass **`output_path=`** widget value or **`FULLSTACK_CUSTOMERS_OUTPUT_DIR`** on cluster env.
+
+Legacy **`fullstack_local_spark.ipynb`** is still **local-only** (`%%bash` + `run-local.sh`).
+
+### Older mapping (still valid when porting arbitrary local notebooks)
+
+| Pattern | Local | Databricks (`fullstack_databricks.ipynb`) |
+|--------|--------|-------------------------------------------|
+| `get_spark()` | ✅ | ✅ |
+| `sys.path` to `src/` | ⚠️ | Prefer wheel / cluster library |
+| `%%bash` + `sbt` / `run-local.sh` | ✅ | ❌ use this notebook instead or a JAR Job |
 
 ---
 
@@ -122,3 +150,6 @@ Optional: `./scala/tokenize-email-job/run-local.sh <input_parquet_dir> <output_p
 | Local Scala runner | `scala/tokenize-email-job/run-local.sh` |
 | Contributor guide | `README.md` |
 | Smoke test | `tests/test_spark_smoke.py` |
+| Local browser notebook | `notebooks/fullstack_local_spark.ipynb` |
+| Databricks import notebook | `notebooks/fullstack_databricks.ipynb` |
+| Email token helpers (PySpark) | `src/fullstack/jobs/email_tokenization.py` |

@@ -10,19 +10,23 @@ import org.apache.spark.sql.functions.{col, concat_ws, element_at, split, trim}
   * Tokenization: `@` separates local part and domain; each side splits on `.` into arrays
   * (e.g. `alice.person` → [alice, person], `example.com` → [example, com]).
   *
-  * Optional args:
-  *   0 - input parquet directory (default: repo jobs/output)
-  *   1 - output parquet directory (default: repo jobs/output_tokenized)
+  * Required args:
+  *   0 - input parquet directory URI (local path, `dbfs:`, UC volume URI, ...)
+  *   1 - output parquet directory URI
+  *
+  * Shell `run-local.sh` fills default repo-relative paths when positional args omitted.
   */
 object TokenizeEmailsJob {
   def main(args: Array[String]): Unit = {
-    val defaultIn =
-      "/Users/markcosciello/git/fullstack/src/fullstack/jobs/output"
-    val defaultOut =
-      "/Users/markcosciello/git/fullstack/src/fullstack/jobs/output_tokenized"
+    if (args.length < 2) {
+      Console.err.println(
+        "Usage: TokenizeEmailsJob <input_parquet_dir> <output_parquet_dir>"
+      )
+      sys.exit(1)
+    }
 
-    val inputPath = args.lift(0).getOrElse(defaultIn)
-    val outputPath = args.lift(1).getOrElse(defaultOut)
+    val inputPath = args(0)
+    val outputPath = args(1)
 
     val spark = SparkSession
       .builder()
