@@ -34,7 +34,7 @@ Use this file to resume work in a new chat thread.
 - **`README.md`** — setup (asdf, Poetry, Java §8), debugging (§11), parallelism (§12), Scala job (§13), troubleshooting.
 - **`.vscode/launch.json`** — module debug `fullstack.jobs.customers_job` from repo root with Poetry `.venv`.
 - **`context_file.md`**, **`initial_request.txt`** — prior notes.
-- **`notebooks/fullstack_databricks.ipynb`** — import/run in **Databricks**: `dbutils` widgets (`customers_parquet_uri`, `tokenized_parquet_uri`, optional **`pip_wheel_uri`**), **`get_spark()`**, **`with_email_token_columns`**; **no `sbt`/JAR/bash** step. Locally it uses temp dirs and `sys.path` to **`src`** for smoke runs.
+- **`notebooks/fullstack_databricks.ipynb`** — import/run on **Databricks**: widgets for customers + separate **PySpark** / **Scala** tokenized URIs, optional **`pip_wheel_uri`**; Part 1 PySpark (**`email_tokenization.py`**), Part 2 **`%%scala`** (same logic as **`TokenizeEmailsJob`** on shared **`spark`**), Python compare cell. **`%%scala`** is **not** plain Jupyter-on-mac; see **[README.databricks.md](README.databricks.md)**.
 - **`notebooks/fullstack_local_spark.ipynb`** — **local-only** Poetry + Jupyter: PySpark + **`%%bash`** `sbt` / `run-local.sh`. Not for uploading to Databricks as-is.
 - Parquet under **`output/`** and **`output_tokenized/`** is **ignored by git**; recreate with jobs or the notebook.
 
