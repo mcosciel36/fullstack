@@ -4,7 +4,12 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
+.ipynb_checkpoints/
 stdout*.txt
 
 # Scala / sbt
 scala/**/target/
+
+# Spark job outputs (local Parquet)
+src/fullstack/jobs/output/
+src/fullstack/jobs/output_tokenized/

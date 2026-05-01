@@ -17,6 +17,10 @@ dev = [
     "mypy",
     "pytest>=8.0,<9.0",
 ]
+notebook = [
+    "ipykernel>=6.29,<7.0",
+    "jupyter>=1.0,<2.0",
+]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
