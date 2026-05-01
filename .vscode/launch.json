@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Python: customers job (module, Poetry .venv)",
+        "type": "debugpy",
+        "request": "launch",
+        "python": "${workspaceFolder}/.venv/bin/python",
+        "module": "fullstack.jobs.customers_job",
+        "cwd": "${workspaceFolder}",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      },
+      {
+        "name": "Python: Current editor file",
+        "type": "debugpy",
+        "request": "launch",
+        "python": "${workspaceFolder}/.venv/bin/python",
+        "program": "${file}",
+        "cwd": "${fileDirname}",
+        "console": "integratedTerminal",
+        "justMyCode": true
+      }
+    ]
+  }
+  

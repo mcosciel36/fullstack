@@ -244,6 +244,153 @@ Optional one-liner:
 poetry run black --check src tests && poetry run isort --check-only src tests && poetry run flake8 src tests && poetry run mypy src && poetry run pytest -q
 ```
 
+## 11) Debugging jobs in Cursor/VS Code (Poetry + module mode)
+
+For predictable imports, prefer module-style debug runs (`python -m ...`) from repo root.
+
+### Launch config
+
+This repo includes a debug target in `.vscode/launch.json`:
+
+```json
+{
+  "name": "Python: customers job (module, Poetry .venv)",
+  "type": "debugpy",
+  "request": "launch",
+  "python": "${workspaceFolder}/.venv/bin/python",
+  "module": "fullstack.jobs.customers_job",
+  "cwd": "${workspaceFolder}",
+  "console": "integratedTerminal",
+  "justMyCode": true
+}
+```
+
+### How to use it
+
+1. Install deps into the in-repo virtualenv:
+
+```bash
+poetry install --extras dev
+```
+
+2. In Cursor/VS Code, select the interpreter:
+   - `${workspaceFolder}/.venv/bin/python`
+3. Open Run and Debug, choose:
+   - `Python: customers job (module, Poetry .venv)`
+4. Press F5.
+
+### Why this setup is preferred
+
+- `module` is equivalent to `python -m fullstack.jobs.customers_job`.
+- `cwd` as `${workspaceFolder}` keeps package resolution stable.
+- explicit `.venv` interpreter aligns debugger runtime with Poetry dependencies.
+
+## 12) Controlling local Spark parallelism and output file count
+
+Spark output file count is usually driven by partition count (often one file per partition).
+
+### Check how many CPU cores your Mac has
+
+```bash
+# Physical cores
+sysctl -n hw.physicalcpu
+
+# Logical cores (used by local[*] in many cases)
+sysctl -n hw.logicalcpu
+
+# Hardware summary
+system_profiler SPHardwareDataType
+```
+
+On the example development machine used for this repo:
+
+- `hw.physicalcpu` = `4`
+- `hw.logicalcpu` = `8`
+- Processor: `Quad-Core Intel Core i7`
+
+### Check Spark parallelism from this project
+
+```bash
+poetry run python -c "from fullstack.spark_session import get_spark, is_databricks_runtime; s=get_spark('parallelism-check'); print('is_databricks_runtime=', is_databricks_runtime()); print('spark_master=', s.sparkContext.master); print('default_parallelism=', s.sparkContext.defaultParallelism); print('shuffle_partitions=', s.conf.get('spark.sql.shuffle.partitions')); s.stop()"
+```
+
+Expected output with current local settings:
+
+- `is_databricks_runtime=False`
+- `spark_master=local[*]`
+- `default_parallelism=8`
+- `shuffle_partitions=4`
+
+### Why 8 parquet part files can happen with 3 rows
+
+`local[*]` uses all local logical cores, which is 8 on this machine. If the DataFrame has 8 partitions at write time, Spark will emit 8 `part-*.parquet` files even for tiny data volumes.
+
+### What controls parallelism
+
+- `master("local[*]")`: use all local logical cores.
+- `master("local[N]")`: cap local execution to `N` cores.
+- `spark.default.parallelism`: baseline partition/task parallelism for many operations.
+- `spark.sql.shuffle.partitions`: partition count for shuffle stages (joins/groupBy/orderBy), not every write.
+
+### How to control output file count
+
+```python
+# Reduce partitions without full shuffle (good for tiny local outputs)
+df.coalesce(1).write.mode("overwrite").parquet(path)
+
+# Set partition count explicitly (does a shuffle)
+df.repartition(4).write.mode("overwrite").parquet(path)
+```
+
+## 13) Scala Spark job (tokenized emails from Parquet)
+
+The Python [`customers_job`](src/fullstack/jobs/customers_job.py) writes customers Parquet to `src/fullstack/jobs/output`. A small Scala Spark job reads that dataset, tokenizes **email** (local part, domain, and `.`-split arrays), and overwrites **`src/fullstack/jobs/output_tokenized`**.
+
+Code lives under [`scala/tokenize-email-job`](scala/tokenize-email-job).
+
+### Prerequisites
+
+- Same **Java** as PySpark (`JAVA_HOME`; see §8).
+- **sbt** (for building the jar), e.g. `brew install sbt`.
+- **`poetry run python`** on PATH from the repo root (the helper script locates Spark’s `spark-submit` from your Poetry PySpark install).
+
+### Build
+
+```bash
+cd scala/tokenize-email-job
+sbt package
+```
+
+This produces:
+
+- `scala/tokenize-email-job/target/scala-2.12/fullstack-tokenize-email-job_2.12-0.1.0.jar`
+
+### Produce input Parquet (Python job)
+
+```bash
+poetry run python -m fullstack.jobs.customers_job
+```
+
+### Run the Scala job locally
+
+From repo root (uses PySpark’s `spark-submit`; optional args are input dir, output dir):
+
+```bash
+./scala/tokenize-email-job/run-local.sh
+```
+
+Or custom paths:
+
+```bash
+./scala/tokenize-email-job/run-local.sh /path/to/input_parquet_dir /path/to/output_parquet_dir
+```
+
+### What the job writes
+
+Adds columns **`email_local`**, **`email_domain`**, **`email_local_tokens`**, **`email_domain_tokens`**, and **`email_token_string`** (rejoined form), preserves original columns (`customer_id`, `name`, `email`, etc.), writes Parquet with `Overwrite` at the configured output directory.
+
+`sbt`/Scala build output goes under **`scala/*/target/`** and is ignored by git via `.gitignore`.
+
 ## Troubleshooting
 
 - If `poetry shell` fails: expected on Poetry 2.x; use `poetry env activate` or `source .venv/bin/activate`.

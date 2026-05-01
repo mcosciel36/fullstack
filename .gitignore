@@ -4,4 +4,7 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
-stdout.txt
+stdout*.txt
+
+# Scala / sbt
+scala/**/target/
